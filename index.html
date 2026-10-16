@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nous Deux</title>
+<style>
+  :root { --bg:#fff5f7; --card:#fff; --main:#e11d48; --soft:#ffe4e9; --text:#2b2b33; --muted:#777; }
+  * { box-sizing:border-box; margin:0; font-family:system-ui,sans-serif; }
+  body { background:var(--bg); color:var(--text); min-height:100vh; padding:16px; }
+  .app { max-width:560px; margin:auto; }
+  h1 { text-align:center; color:var(--main); margin:8px 0 16px; }
+  nav { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
+  nav button { flex:1 1 30%; padding:10px 4px; border:none; border-radius:12px; background:var(--soft); color:var(--main); font-weight:600; font-size:.8rem; cursor:pointer; }
+  nav button.active { background:var(--main); color:#fff; }
+  .card { background:var(--card); border-radius:16px; padding:20px; box-shadow:0 4px 14px rgba(0,0,0,.06); margin-bottom:16px; }
+  .filters { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+  label { font-size:.8rem; color:var(--muted); display:block; margin-bottom:4px; }
+  select, input { width:100%; padding:10px; border-radius:10px; border:1px solid #ddd; font-size:1rem; }
+  .btn { width:100%; padding:12px; border:none; border-radius:12px; background:var(--main); color:#fff; font-size:1rem; font-weight:600; cursor:pointer; }
+  .btn.alt { background:var(--soft); color:var(--main); margin-top:8px; }
+  .result { text-align:center; padding:24px 8px; font-size:1.2rem; min-height:90px; }
+  .tags { margin-top:8px; font-size:.8rem; color:var(--muted); }
+  .fav { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #f0f0f0; }
+  .fav button { background:none; border:none; cursor:pointer; font-size:1rem; }
+  .hidden { display:none !important; }
+  .turn { text-align:center; font-weight:600; color:var(--main); margin-bottom:8px; }
+  .big { font-size:2.4rem; font-weight:700; color:var(--main); text-align:center; }
+  .row { display:flex; gap:8px; margin-top:8px; }
+  .row .btn { font-size:.85rem; padding:10px 4px; }
+  .desc { font-size:.85rem; color:var(--muted); text-align:center; margin-bottom:12px; line-height:1.4; }
+  .canvases { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:10px 0; }
+  canvas { width:100%; aspect-ratio:1; background:#fff; border:2px solid var(--soft); border-radius:12px; touch-action:none; }
+  .pad { display:block; width:100%; height:200px; margin:12px 0; border:none; border-radius:16px; font-size:1.2rem; font-weight:700; color:#fff; background:#94a3b8; cursor:pointer; touch-action:manipulation; }
+  .pad.wait { background:#ef4444; }
+  .pad.go { background:#22c55e; }
+  .cwrap { position:relative; max-width:320px; margin:0 auto 12px; }
+  #cadavre { aspect-ratio:2/3; display:block; }
+  #cmask { position:absolute; left:0; top:0; width:100%; height:0; display:flex; align-items:center; justify-content:center; text-align:center; padding:8px; color:var(--muted); font-weight:600; background:repeating-linear-gradient(45deg,#f3f4f6,#f3f4f6 10px,#e5e7eb 10px,#e5e7eb 20px); border-radius:12px 12px 0 0; pointer-events:none; overflow:hidden; }
+  #czone { position:absolute; left:0; width:100%; border:2px dashed var(--main); border-radius:8px; pointer-events:none; }
+  #status { text-align:center; font-size:.85rem; margin-bottom:12px; color:var(--muted); }
+  .code { font-size:2.2rem; letter-spacing:.3em; font-weight:800; color:var(--main); text-align:center; margin:12px 0 4px; }
+  #join-code { text-align:center; text-transform:uppercase; letter-spacing:.2em; font-weight:700; }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>💕 Nous Deux</h1>
+
+  <!-- LOBBY : créer / rejoindre une session -->
+  <section id="lobby" class="card">
+    <p class="desc">Jouez ensemble à distance ! L'un crée une session et envoie le code, l'autre le saisit.</p>
+    <button class="btn" id="create">✨ Créer une session</button>
+    <div id="share" class="hidden">
+      <div class="code" id="room-code">-----</div>
+      <button class="btn alt" id="copy-link">🔗 Copier le lien d'invitation</button>
+    </div>
+    <div class="turn" style="margin:16px 0 8px">ou</div>
+    <input id="join-code" placeholder="CODE" maxlength="5" autocomplete="off">
+    <button class="btn alt" id="join">Rejoindre la session</button>
+    <div class="tags" id="lobby-msg" style="text-align:center;margin-top:10px"></div>
+  </section>
+
+  <div id="main" class="hidden">
+    <div id="status"></div>
+    <nav>
+      <button id="tab-ideas" class="active">Idées de sorties</button>
+      <button id="tab-games">Jeux & défis</button>
+      <button id="tab-draw">🎨 Dessin</button>
+      <button id="tab-sync">🧠 Même pensée</button>
+      <button id="tab-reflex">⚡ Réflexes</button>
+      <button id="tab-cadavre">👾 Cadavre exquis</button>
+    </nav>
+
+    <!-- IDÉES -->
+    <section id="ideas">
+      <div class="card">
+        <p class="desc">Tire au sort une idée de sortie selon le budget, le lieu, l'ambiance et la durée. Vous voyez la même idée en même temps.</p>
+        <div class="filters">
+          <div><label>Budget</label>
+            <select id="f-budget"><option value="">Tous</option><option>gratuit</option><option>petit</option><option>moyen</option><option>grand</option></select></div>
+          <div><label>Lieu</label>
+            <select id="f-lieu"><option value="">Tous</option><option>maison</option><option>dehors</option></select></div>
+          <div><label>Ambiance</label>
+            <select id="f-mood"><option value="">Toutes</option><option>romantique</option><option>fun</option><option>calme</option><option>aventure</option></select></div>
+          <div><label>Durée</label>
+            <select id="f-duree"><option value="">Toutes</option><option>court</option><option>soirée</option><option>journée</option></select></div>
+        </div>
+        <button class="btn" id="gen">🎲 Donne-nous une idée</button>
+        <div class="result" id="idea-result">Appuie sur le bouton pour commencer ✨</div>
+        <button class="btn alt hidden" id="save">❤️ Garder cette idée</button>
+      </div>
+      <div class="card">
+        <strong>Mes idées favorites</strong>
+        <div id="favs"></div>
+      </div>
+    </section>
+
+    <!-- JEUX & DÉFIS -->
+    <section id="games" class="hidden">
+      <div class="card">
+        <p class="desc">Questions, défis et « tu préfères » : la question s'affiche chez vous deux et chacun répond à tour de rôle (voix, appel vidéo).</p>
+        <div class="turn" id="turn">Choisis un type et lance-toi</div>
+        <div class="filters" style="grid-template-columns:1fr">
+          <div><label>Type</label>
+            <select id="g-type"><option value="questions">Questions pour se connaître</option><option value="defis">Défis à deux</option><option value="wyr">Tu préfères...</option></select></div>
+        </div>
+        <button class="btn" id="g-gen">Suivant</button>
+        <div class="result" id="game-result">💬</div>
+      </div>
+    </section>
+
+    <!-- DESSIN DUEL -->
+    <section id="draw" class="hidden">
+      <div class="card">
+        <p class="desc">Un mot apparaît chez vous deux : dessinez en même temps pendant 60 s. Vous voyez le dessin de l'autre en direct, puis vous votez !</p>
+        <div class="big" id="draw-word">?</div>
+        <div class="turn" id="draw-timer">Appuie sur le bouton pour lancer</div>
+        <div class="canvases">
+          <div><div class="turn">Toi</div><canvas id="c1" width="300" height="300"></canvas></div>
+          <div><div class="turn">Partenaire</div><canvas id="c2" width="300" height="300"></canvas></div>
+        </div>
+        <button class="btn" id="draw-start">🎨 Nouveau mot (60 s)</button>
+        <div id="vote" class="hidden">
+          <div class="turn" style="margin-top:12px">Qui a le meilleur dessin ?</div>
+          <div class="row">
+            <button class="btn alt" data-w="me">Moi</button>
+            <button class="btn alt" data-w="them">Partenaire</button>
+            <button class="btn alt" data-w="tie">Égalité</button>
+          </div>
+        </div>
+        <div class="tags" id="score" style="text-align:center;margin-top:10px">Score — Toi : 0 · Partenaire : 0</div>
+      </div>
+    </section>
+
+    <!-- MÊME PENSÉE -->
+    <section id="sync" class="hidden">
+      <div class="card">
+        <p class="desc">Une catégorie apparaît : écris ton mot en secret. Quand vous avez tous les deux validé, les mots sont révélés. Même mot = point !</p>
+        <div class="result" id="sync-cat" style="min-height:60px">Prêts ?</div>
+        <div class="big" id="sync-count"></div>
+        <div id="sync-input" class="hidden">
+          <input id="sync-word" placeholder="Ton mot..." maxlength="40" autocomplete="off">
+          <button class="btn alt" id="sync-ok">Valider</button>
+        </div>
+        <div class="turn" id="sync-reveal" style="margin-top:12px"></div>
+        <button class="btn" id="sync-start" style="margin-top:8px">🧠 Nouvelle catégorie</button>
+        <div class="tags" id="sync-score" style="text-align:center;margin-top:10px">Mêmes mots : 0 / 0</div>
+      </div>
+    </section>
+
+    <!-- DUEL DE RÉFLEXES -->
+    <section id="reflex" class="hidden">
+      <div class="card">
+        <p class="desc">Chacun sur son écran : quand le bouton passe au vert, tape le plus vite possible. Ton temps est mesuré chez toi, donc c'est équitable malgré la distance. Trop tôt = perdu !</p>
+        <button class="pad" id="pad">Ton bouton</button>
+        <div class="turn" id="reflex-msg">Prêts ?</div>
+        <button class="btn" id="reflex-start">⚡ Lancer la manche</button>
+        <div class="tags" id="reflex-score" style="text-align:center;margin-top:10px">Score — Toi : 0 · Partenaire : 0</div>
+      </div>
+    </section>
+
+    <!-- CADAVRE EXQUIS -->
+    <section id="cadavre-sec" class="hidden">
+      <div class="card">
+        <p class="desc">Chacun dessine une partie d'un personnage (tête, corps, jambes) sans voir le reste. Le dessin se passe d'un écran à l'autre, et on révèle le monstre à la fin !</p>
+        <div class="turn" id="cinfo"></div>
+        <div class="cwrap">
+          <canvas id="cadavre" width="300" height="450"></canvas>
+          <div id="cmask"></div>
+          <div id="czone"></div>
+        </div>
+        <button class="btn" id="cnext">Terminé, passer à la suite →</button>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const clamp01 = v => Math.min(1, Math.max(0, Number(v) || 0));
+let isHost = false;
+const ROLE = () => isHost ? "host" : "guest";
+const OTHER = () => isHost ? "guest" : "host";
+
+/* =============== DONNÉES =============== */
+const IDEAS = [
+  {t:"Pique-nique au coucher du soleil", budget:"petit", lieu:"dehors", mood:"romantique", duree:"soirée"},
+  {t:"Cuisiner un plat d'un pays que vous ne connaissez pas", budget:"petit", lieu:"maison", mood:"fun", duree:"soirée"},
+  {t:"Soirée film + snacks maison avec fort de coussins", budget:"gratuit", lieu:"maison", mood:"calme", duree:"soirée"},
+  {t:"Balade sans destination, tourner à chaque carrefour au hasard", budget:"gratuit", lieu:"dehors", mood:"aventure", duree:"court"},
+  {t:"Visiter un musée ou une expo", budget:"moyen", lieu:"dehors", mood:"calme", duree:"journée"},
+  {t:"Jeu de société ou jeu de cartes avec un petit pari", budget:"gratuit", lieu:"maison", mood:"fun", duree:"soirée"},
+  {t:"Dîner dans un restaurant que vous n'avez jamais testé", budget:"moyen", lieu:"dehors", mood:"romantique", duree:"soirée"},
+  {t:"Week-end improvisé dans une ville proche", budget:"grand", lieu:"dehors", mood:"aventure", duree:"journée"},
+  {t:"Regarder les étoiles avec une couverture et un thermos", budget:"gratuit", lieu:"dehors", mood:"romantique", duree:"soirée"},
+  {t:"Atelier poterie, peinture ou cuisine à deux", budget:"moyen", lieu:"dehors", mood:"fun", duree:"soirée"},
+  {t:"Massage mutuel + playlist + bougies", budget:"gratuit", lieu:"maison", mood:"romantique", duree:"court"},
+  {t:"Randonnée avec pique-nique", budget:"petit", lieu:"dehors", mood:"aventure", duree:"journée"},
+  {t:"Écrire chacun une lettre pour dans 1 an, puis la cacher", budget:"gratuit", lieu:"maison", mood:"calme", duree:"court"},
+  {t:"Karaoké à la maison avec YouTube", budget:"gratuit", lieu:"maison", mood:"fun", duree:"soirée"},
+  {t:"Sortie vélo ou trottinette puis glace", budget:"petit", lieu:"dehors", mood:"fun", duree:"court"},
+  {t:"Escape game ou jeu d'énigmes en ville", budget:"moyen", lieu:"dehors", mood:"aventure", duree:"soirée"}
+];
+const GAMES = {
+  questions:["Quel est ton plus beau souvenir de nous deux ?","Quel rêve aimerais-tu réaliser dans les 5 prochaines années ?","Quelle petite chose que je fais te rend heureux/se ?","Quelle est ta plus grande peur en ce moment ?","Où aimerais-tu vivre un jour ?","Quel moment de ton enfance te marque le plus ?","Qu'est-ce qui t'a plu chez moi en premier ?","Quelle habitude aimerais-tu qu'on prenne ensemble ?"],
+  defis:["Imite l'autre pendant 1 minute.","Dis 3 qualités de ton partenaire sans réfléchir.","Danse 30 secondes sur une chanson choisie par l'autre.","Dessine ton partenaire en 1 minute, sans lever le crayon.","Raconte une anecdote gênante que l'autre ne connaît pas.","Fais un compliment original à ton partenaire.","Planifiez ensemble un voyage de rêve en 2 minutes."],
+  wyr:["Tu préfères voyager partout en sac à dos ou dans des hôtels de luxe ?","Tu préfères vivre à la montagne ou au bord de la mer ?","Tu préfères une soirée Netflix ou une soirée dehors ?","Tu préfères savoir le futur ou changer le passé ?","Tu préfères cuisiner ensemble ou commander ?","Tu préfères une surprise ou tout planifier ?"]
+};
+const WORDS = ["vache","chat","maison","voiture","pizza","avion","arbre","robot","guitare","poisson","château","vélo","soleil","fusée","dragon","parapluie","éléphant","bateau","gâteau","girafe"];
+const CATS = ["Un fruit","Un animal","Une couleur","Un pays","Un film","Un prénom","Une ville","Un métier","Un plat","Un objet dans la cuisine","Une destination de rêve","Un sport"];
+
+/* =============== RÉSEAU (PeerJS / WebRTC) =============== */
+const PREFIX = "nousdeux-";
+const ICE = { config: { iceServers: [
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:stun1.l.google.com:19302" },
+  { urls: ["turn:openrelay.metered.ca:80", "turn:openrelay.metered.ca:443"], username: "openrelayproject", credential: "openrelayproject" }
+] } };
+let peer = null, conn = null, roomCode = "";
+
+function genCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  return Array.from({ length: 5 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+}
+function lobbyMsg(t) { $("lobby-msg").textContent = t; }
+
+function createRoom() {
+  if (typeof Peer === "undefined") return lobbyMsg("Le module réseau n'a pas pu se charger. Vérifie ta connexion.");
+  isHost = true; roomCode = genCode();
+  peer = new Peer(PREFIX + roomCode, ICE);
+  peer.on("open", () => {
+    $("share").classList.remove("hidden");
+    $("room-code").textContent = roomCode;
+    lobbyMsg("En attente de ton/ta partenaire…");
+  });
+  peer.on("connection", c => { if (conn && conn.open) { c.close(); return; } setupConn(c); });
+  peer.on("error", e => {
+    if (e.type === "unavailable-id") { peer.destroy(); createRoom(); }
+    else lobbyMsg("Erreur réseau (" + e.type + "). Réessaie.");
+  });
+}
+function joinRoom(code) {
+  if (typeof Peer === "undefined") return lobbyMsg("Le module réseau n'a pas pu se charger. Vérifie ta connexion.");
+  code = code.trim().toUpperCase();
+  if (!/^[A-Z0-9]{5}$/.test(code)) return lobbyMsg("Le code doit faire 5 caractères.");
+  isHost = false; roomCode = code; lobbyMsg("Connexion en cours…");
+  peer = new Peer(ICE);
+  peer.on("open", () => {
+    setupConn(peer.connect(PREFIX + code, { reliable: true }));
+    setTimeout(() => { if (!conn || !conn.open) lobbyMsg("Connexion impossible pour l'instant. Vérifie le code et réessaie."); }, 15000);
+  });
+  peer.on("error", e => lobbyMsg(e.type === "peer-unavailable" ? "Code introuvable. Vérifie-le." : "Erreur réseau (" + e.type + ")."));
+}
+function setupConn(c) {
+  conn = c;
+  c.on("open", () => {
+    $("lobby").classList.add("hidden");
+    $("main").classList.remove("hidden");
+    setStatus(true);
+    cview();
+  });
+  c.on("data", m => { try { handleMsg(m); } catch (err) { /* message invalide ignoré */ } });
+  c.on("close", () => setStatus(false));
+  c.on("error", () => setStatus(false));
+}
+function setStatus(ok) {
+  $("status").textContent = ok
+    ? "🟢 Connectés · session " + roomCode
+    : "🔴 Ton/ta partenaire s'est déconnecté(e). Recharge la page pour une nouvelle session.";
+}
+function send(m) { if (conn && conn.open) conn.send(m); }
+
+$("create").onclick = createRoom;
+$("join").onclick = () => joinRoom($("join-code").value);
+$("copy-link").onclick = async () => {
+  const link = location.href.split("?")[0].split("#")[0] + "?room=" + roomCode;
+  try { await navigator.clipboard.writeText(link); lobbyMsg("Lien copié ! Envoie-le à ton/ta partenaire 💌"); }
+  catch (e) { lobbyMsg("Copie ce lien : " + link); }
+};
+const urlRoom = new URLSearchParams(location.search).get("room");
+if (urlRoom) { $("join-code").value = urlRoom.toUpperCase().slice(0, 5); joinRoom(urlRoom); }
+
+/* =============== ROUTEUR DE MESSAGES =============== */
+function handleMsg(m) {
+  if (!m || typeof m.t !== "string") return;
+  switch (m.t) {
+    case "idea": showIdea(m.i); break;
+    case "g": showGame(m.type, m.i, m.who); gTurn = (Number(m.who) + 1) % 2; break;
+    case "dstart": startDraw(m.i); break;
+    case "ds": if (Array.isArray(m.a) && m.a.length === 4) seg(ctxThem, cThem, m.a.map(clamp01)); break;
+    case "dvote": applyVote(m.w); break;
+    case "sstart": startSync(m.i); break;
+    case "sword": theirWord = String(m.w || "").slice(0, 40); syncCheck(); break;
+    case "rstart": startReflex(Math.min(6000, Math.max(0, Number(m.d) || 3000))); break;
+    case "rres":
+      if (m.early) setRes(OTHER(), { early: true });
+      else if (typeof m.ms === "number") setRes(OTHER(), { ms: Math.max(0, Math.min(99999, m.ms)) });
+      break;
+    case "cnext": cReceive(m); break;
+    case "creset": cctx.clearRect(0, 0, cv.width, cv.height); cph = 0; cview(); break;
+  }
+}
+
+/* =============== NAVIGATION =============== */
+const TABS = ["ideas", "games", "draw", "sync", "reflex", "cadavre"];
+function show(tab) {
+  TABS.forEach(t => {
+    const sec = t === "cadavre" ? $("cadavre-sec") : $(t);
+    sec.classList.toggle("hidden", t !== tab);
+    $("tab-" + t).classList.toggle("active", t === tab);
+  });
+}
+TABS.forEach(t => $("tab-" + t).onclick = () => show(t));
+
+/* =============== IDÉES DE SORTIES =============== */
+let current = null;
+let favs = [];
+try { favs = JSON.parse(localStorage.getItem("favs") || "[]"); } catch (e) {}
+function saveFavs() { try { localStorage.setItem("favs", JSON.stringify(favs)); } catch (e) {} }
+function renderFavs() {
+  const box = $("favs"); box.textContent = "";
+  if (!favs.length) { const p = document.createElement("p"); p.style.cssText = "color:#999;margin-top:8px"; p.textContent = "Aucune idée gardée pour l'instant."; box.appendChild(p); return; }
+  favs.forEach((f, i) => {
+    const d = document.createElement("div"); d.className = "fav";
+    const s = document.createElement("span"); s.textContent = f;
+    const b = document.createElement("button"); b.textContent = "🗑️";
+    b.onclick = () => { favs.splice(i, 1); saveFavs(); renderFavs(); };
+    d.append(s, b); box.appendChild(d);
+  });
+}
+function showIdea(i) {
+  const it = IDEAS[i]; if (!it) return;
+  current = it;
+  const r = $("idea-result"); r.textContent = it.t;
+  const tg = document.createElement("div"); tg.className = "tags";
+  tg.textContent = [it.budget, it.lieu, it.mood, it.duree].join(" · ");
+  r.appendChild(tg);
+  $("save").classList.remove("hidden");
+}
+$("gen").onclick = () => {
+  const f = { budget: $("f-budget").value, lieu: $("f-lieu").value, mood: $("f-mood").value, duree: $("f-duree").value };
+  const pool = IDEAS.map((x, i) => i).filter(i => Object.keys(f).every(k => !f[k] || IDEAS[i][k] === f[k]));
+  if (!pool.length) { $("idea-result").textContent = "Aucune idée avec ces filtres 😅 Essayez d'en retirer un."; $("save").classList.add("hidden"); return; }
+  const idx = pool[Math.floor(Math.random() * pool.length)];
+  send({ t: "idea", i: idx }); showIdea(idx);
+};
+$("save").onclick = () => { if (current && !favs.includes(current.t)) { favs.push(current.t); saveFavs(); renderFavs(); } };
+
+/* =============== JEUX & DÉFIS =============== */
+let gTurn = 0;
+function showGame(type, i, who) {
+  const list = GAMES[type];
+  if (!Array.isArray(list) || !list[i]) return;
+  $("game-result").textContent = list[i];
+  $("turn").textContent = Number(who) === (isHost ? 0 : 1) ? "🎯 À toi de répondre !" : "👀 Au tour de ton/ta partenaire";
+}
+$("g-gen").onclick = () => {
+  const type = $("g-type").value, list = GAMES[type];
+  const i = Math.floor(Math.random() * list.length), who = gTurn;
+  gTurn = (gTurn + 1) % 2;
+  send({ t: "g", type, i, who }); showGame(type, i, who);
+};
+
+/* =============== DESSIN DUEL =============== */
+const cMe = $("c1"), cThem = $("c2");
+const ctxMe = cMe.getContext("2d"), ctxThem = cThem.getContext("2d");
+[ctxMe, ctxThem].forEach(c => { c.lineWidth = 5; c.lineCap = "round"; });
+let drawActive = false, drawTimer = null, dscore = { host: 0, guest: 0 }, dvoted = true;
+let dDrawing = false, dLast = null;
+
+function seg(ctx, c, a) { ctx.beginPath(); ctx.moveTo(a[0] * c.width, a[1] * c.height); ctx.lineTo(a[2] * c.width, a[3] * c.height); ctx.stroke(); }
+const dpos = e => { const r = cMe.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height }; };
+cMe.addEventListener("pointerdown", e => { if (!drawActive) return; cMe.setPointerCapture(e.pointerId); dDrawing = true; dLast = dpos(e); });
+cMe.addEventListener("pointermove", e => {
+  if (!dDrawing || !drawActive) return;
+  const p = dpos(e), a = [dLast.x, dLast.y, p.x, p.y];
+  seg(ctxMe, cMe, a); send({ t: "ds", a }); dLast = p;
+});
+["pointerup", "pointercancel"].forEach(ev => cMe.addEventListener(ev, () => dDrawing = false));
+
+function startDraw(i) {
+  if (!WORDS[i]) return;
+  clearInterval(drawTimer);
+  ctxMe.clearRect(0, 0, cMe.width, cMe.height); ctxThem.clearRect(0, 0, cThem.width, cThem.height);
+  ctxMe.strokeStyle = isHost ? "#e11d48" : "#2563eb";
+  ctxThem.strokeStyle = isHost ? "#2563eb" : "#e11d48";
+  $("vote").classList.add("hidden");
+  $("draw-word").textContent = WORDS[i];
+  let t = 60; drawActive = true; dvoted = false;
+  $("draw-timer").textContent = "⏱️ " + t + " s";
+  drawTimer = setInterval(() => {
+    t--; $("draw-timer").textContent = "⏱️ " + t + " s";
+    if (t <= 0) {
+      clearInterval(drawTimer); drawActive = false;
+      $("draw-timer").textContent = "⏰ Temps écoulé !";
+      $("vote").classList.remove("hidden");
+    }
+  }, 1000);
+}
+$("draw-start").onclick = () => { const i = Math.floor(Math.random() * WORDS.length); send({ t: "dstart", i }); startDraw(i); };
+function scoreTxt() { $("score").textContent = "Score — Toi : " + dscore[ROLE()] + " · Partenaire : " + dscore[OTHER()]; }
+function applyVote(w) {
+  if (dvoted) return;
+  dvoted = true;
+  if (w === "host" || w === "guest") dscore[w]++;
+  scoreTxt(); $("vote").classList.add("hidden");
+}
+document.querySelectorAll("#vote button").forEach(b => b.onclick = () => {
+  const w = b.dataset.w === "me" ? ROLE() : b.dataset.w === "them" ? OTHER() : "tie";
+  send({ t: "dvote", w }); applyVote(w);
+});
+
+/* =============== MÊME PENSÉE =============== */
+let sCount = null, myWord = null, theirWord = null, sSame = 0, sTotal = 0, sDone = true;
+const norm = s => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+function startSync(i) {
+  if (!CATS[i]) return;
+  clearInterval(sCount);
+  myWord = null; theirWord = null; sDone = false;
+  $("sync-cat").textContent = CATS[i] + " ?";
+  $("sync-reveal").textContent = "";
+  $("sync-input").classList.add("hidden");
+  $("sync-word").value = ""; $("sync-word").disabled = false; $("sync-ok").disabled = false;
+  let n = 3; $("sync-count").textContent = n;
+  sCount = setInterval(() => {
+    n--;
+    if (n > 0) $("sync-count").textContent = n;
+    else {
+      clearInterval(sCount); $("sync-count").textContent = "✍️";
+      $("sync-input").classList.remove("hidden"); $("sync-word").focus();
+    }
+  }, 1000);
+}
+$("sync-start").onclick = () => { const i = Math.floor(Math.random() * CATS.length); send({ t: "sstart", i }); startSync(i); };
+$("sync-ok").onclick = () => {
+  const w = $("sync-word").value.trim().slice(0, 40);
+  if (!w || myWord !== null) return;
+  myWord = w; $("sync-word").disabled = true; $("sync-ok").disabled = true;
+  send({ t: "sword", w });
+  if (theirWord === null) $("sync-reveal").textContent = "En attente de ton/ta partenaire…";
+  syncCheck();
+};
+function syncCheck() {
+  if (sDone) return;
+  if (theirWord !== null && myWord === null) { $("sync-reveal").textContent = "Ton/ta partenaire a répondu ✅ À toi !"; return; }
+  if (myWord === null || theirWord === null) return;
+  sDone = true; sTotal++;
+  const same = norm(myWord) === norm(theirWord);
+  if (same) sSame++;
+  $("sync-reveal").textContent = "Toi : " + myWord + " · Partenaire : " + theirWord + (same ? " 🎉 Même mot !" : " ❌");
+  $("sync-score").textContent = "Mêmes mots : " + sSame + " / " + sTotal;
+  $("sync-count").textContent = "";
+}
+
+/* =============== DUEL DE RÉFLEXES =============== */
+let rState = "idle", rTimer = null, goTime = 0, rScore = { host: 0, guest: 0 }, rRes = { host: null, guest: null };
+const pad = $("pad");
+function rScoreTxt() { $("reflex-score").textContent = "Score — Toi : " + rScore[ROLE()] + " · Partenaire : " + rScore[OTHER()]; }
+function startReflex(delay) {
+  clearTimeout(rTimer);
+  rRes = { host: null, guest: null }; rState = "waiting";
+  pad.className = "pad wait"; pad.textContent = "Attends le vert…";
+  $("reflex-msg").textContent = "Concentre-toi 🤫";
+  rTimer = setTimeout(() => {
+    rState = "go"; goTime = performance.now();
+    pad.className = "pad go"; pad.textContent = "TAPE !";
+    $("reflex-msg").textContent = "GO !";
+  }, delay);
+}
+$("reflex-start").onclick = () => {
+  if (rState === "waiting" || rState === "go") return;
+  const d = 2000 + Math.random() * 3000;
+  send({ t: "rstart", d }); startReflex(d);
+};
+pad.addEventListener("pointerdown", () => {
+  if (rState === "waiting") { clearTimeout(rTimer); rState = "done"; setRes(ROLE(), { early: true }); send({ t: "rres", early: true }); }
+  else if (rState === "go") { rState = "done"; const ms = Math.round(performance.now() - goTime); setRes(ROLE(), { ms }); send({ t: "rres", ms }); }
+});
+function setRes(role, r) {
+  rRes[role] = r;
+  if (role === ROLE()) {
+    pad.className = "pad"; pad.textContent = "Ton bouton";
+    $("reflex-msg").textContent = r.early ? "Trop tôt ! En attente du résultat…" : "Ton temps : " + r.ms + " ms. En attente de l'autre…";
+  }
+  if (rRes.host && rRes.guest) resolveReflex();
+}
+function resolveReflex() {
+  const h = rRes.host, g = rRes.guest;
+  let w = null;
+  if (h.early && g.early) w = null;
+  else if (h.early) w = "guest";
+  else if (g.early) w = "host";
+  else w = h.ms <= g.ms ? "host" : "guest";
+  const mine = rRes[ROLE()], theirs = rRes[OTHER()];
+  const fmt = r => r.early ? "trop tôt" : r.ms + " ms";
+  const who = !w ? "Égalité 🤝" : (w === ROLE() ? "Tu gagnes 🏆" : "Ton/ta partenaire gagne 👏");
+  $("reflex-msg").textContent = who + " · Toi : " + fmt(mine) + " · Partenaire : " + fmt(theirs);
+  if (w) rScore[w]++;
+  rState = "idle"; rRes = { host: null, guest: null }; rScoreTxt();
+}
+
+/* =============== CADAVRE EXQUIS =============== */
+const cv = $("cadavre"), cctx = cv.getContext("2d");
+const CZ = ["la TÊTE 🙂", "le CORPS 👕", "les JAMBES 🦵"];
+let cph = 0, cdrawing = false, clast = null;
+cctx.lineWidth = 5; cctx.lineCap = "round";
+const myTurn = () => cph < 3 && ((cph % 2 === 0) === isHost);
+function crange() { return [cph === 0 ? 0 : cph * 150 - 20, (cph + 1) * 150]; }
+function cview() {
+  const mask = $("cmask"), zone = $("czone");
+  mask.textContent = "";
+  if (cph >= 3) {
+    mask.style.height = "0"; zone.style.display = "none";
+    $("cinfo").textContent = "🎉 Voici votre monstre !";
+    $("cnext").textContent = "Nouveau dessin"; $("cnext").classList.remove("hidden");
+    return;
+  }
+  if (!myTurn()) {
+    mask.style.height = "100%"; mask.textContent = "🙈 Ton/ta partenaire dessine " + CZ[cph] + "…";
+    zone.style.display = "none";
+    $("cinfo").textContent = "En attente de ton/ta partenaire…";
+    $("cnext").classList.add("hidden");
+    return;
+  }
+  const [lo, hi] = crange();
+  mask.style.height = (cph === 0 ? 0 : lo / 450 * 100) + "%";
+  zone.style.display = "block";
+  zone.style.top = lo / 450 * 100 + "%"; zone.style.height = (hi - lo) / 450 * 100 + "%";
+  $("cinfo").textContent = "À toi : dessine " + CZ[cph] + (cph > 0 ? " (relie-toi au trait visible)" : "");
+  $("cnext").textContent = cph < 2 ? "Terminé, passer à la suite →" : "Terminé, révéler le monstre 🎉";
+  $("cnext").classList.remove("hidden");
+  cctx.strokeStyle = cph % 2 === 0 ? "#e11d48" : "#2563eb";
+}
+function cpos(e) { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * cv.width / r.width, y: (e.clientY - r.top) * cv.height / r.height }; }
+function cok(p) { if (!myTurn()) return false; const [lo, hi] = crange(); return p.y >= lo && p.y < hi; }
+cv.addEventListener("pointerdown", e => { cv.setPointerCapture(e.pointerId); cdrawing = true; clast = cpos(e); });
+cv.addEventListener("pointermove", e => {
+  if (!cdrawing) return;
+  const p = cpos(e);
+  if (cok(p) && cok(clast)) { cctx.beginPath(); cctx.moveTo(clast.x, clast.y); cctx.lineTo(p.x, p.y); cctx.stroke(); }
+  clast = p;
+});
+["pointerup", "pointercancel"].forEach(ev => cv.addEventListener(ev, () => cdrawing = false));
+$("cnext").onclick = () => {
+  if (cph >= 3) { cctx.clearRect(0, 0, cv.width, cv.height); cph = 0; send({ t: "creset" }); cview(); return; }
+  cph++;
+  send({ t: "cnext", img: cv.toDataURL("image/png"), ph: cph });
+  cview();
+};
+function cReceive(m) {
+  const ph = Number(m.ph);
+  if (!(ph >= 1 && ph <= 3) || typeof m.img !== "string" || !m.img.startsWith("data:image/png;base64,")) return;
+  const img = new Image();
+  img.onload = () => { cctx.clearRect(0, 0, cv.width, cv.height); cctx.drawImage(img, 0, 0); cph = ph; cview(); };
+  img.src = m.img;
+}
+
+renderFavs();
+</script>
+</body>
+</html>
